@@ -1,8 +1,8 @@
 package lookup
 
 import (
-	messagebird "github.com/messagebird/go-rest-api/v9"
-	"github.com/messagebird/go-rest-api/v9/hlr"
+	messagebird "github.com/Bijles-aan-Huis-B-V/messagebird-go-rest-api"
+	"github.com/Bijles-aan-Huis-B-V/messagebird-go-rest-api/hlr"
 	"net/http"
 	"net/url"
 )

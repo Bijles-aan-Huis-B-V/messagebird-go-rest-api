@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"time"
 
-	messagebird "github.com/messagebird/go-rest-api/v9"
+	messagebird "github.com/Bijles-aan-Huis-B-V/messagebird-go-rest-api"
 )
 
 // A Transcription is a textual representation of a recording as text.

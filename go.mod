@@ -1,4 +1,4 @@
-module github.com/messagebird/go-rest-api/v9
+module github.com/Bijles-aan-Huis-B-V/messagebird-go-rest-api
 
 go 1.16
 

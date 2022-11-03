@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"reflect"
 
-	messagebird "github.com/messagebird/go-rest-api/v9"
+	messagebird "github.com/Bijles-aan-Huis-B-V/messagebird-go-rest-api"
 )
 
 // A Paginator is used to stream the contents of a collection of some type from

@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"time"
 
-	messagebird "github.com/messagebird/go-rest-api/v9"
+	messagebird "github.com/Bijles-aan-Huis-B-V/messagebird-go-rest-api"
 )
 
 // A CallFlow describes the flow of operations (steps) to be executed when
