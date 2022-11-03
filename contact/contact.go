@@ -12,6 +12,7 @@ import (
 
 // path represents the path to the Contacts resource.
 const path = "https://contacts.messagebird.com/v2/contacts"
+const pathOps = "https://contacts.messagebird.com/v2/ops/contacts"
 
 // Contact gets returned by the API.
 type Contact struct {
@@ -59,6 +60,16 @@ type CreateRequest struct {
 	Identifiers []Identifier      `json:"identifiers,omitempty"`
 	Profiles    []Profile         `json:"profiles,omitempty"`
 	Attributes  map[string]string `json:"attributes,omitempty"`
+}
+
+type UpsertRequest struct {
+	UpdateContact bool           `json:"updateContact"`
+	Contact       *CreateRequest `json:"contact"`
+}
+
+type UpsertResponse struct {
+	ContactId string `json:"contactId"`
+	Created   bool   `json:"created"`
 }
 
 // Filter can be applied to a list request to filter the results and paginate through them.
@@ -144,4 +155,15 @@ func Update(c messagebird.Client, id string, contactRequest *CreateRequest) (*Co
 	}
 
 	return contact, nil
+}
+
+// Upsert looks for an existing contact matching the criteria and either updates it or creates a new one.
+// The contact ID is always returned as well as an indicator if the contact has been created.
+func Upsert(c messagebird.Client, contactRequest *UpsertRequest) (*UpsertResponse, error) {
+	response := &UpsertResponse{}
+	if err := c.Request(response, http.MethodPost, pathOps+"/upsert", contactRequest); err != nil {
+		return nil, err
+	}
+
+	return response, nil
 }
