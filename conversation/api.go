@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	// apiRoot is the absolute URL of the Converstations API. All paths are
+	// apiRoot is the absolute URL of the Conversations API. All paths are
 	// relative to apiRoot (e.g.
 	// https://conversations.messagebird.com/v1/webhooks).
 	apiRoot = "https://conversations.messagebird.com/v1"
