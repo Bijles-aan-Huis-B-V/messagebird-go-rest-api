@@ -3,6 +3,8 @@ package integration
 import (
 	"github.com/Bijles-aan-Huis-B-V/messagebird-go-rest-api"
 	"net/http"
+	"net/url"
+	"strconv"
 	"time"
 )
 
@@ -124,7 +126,26 @@ func CreateWhatsAppTemplate(c messagebird.Client, request *CreateWhatsAppTemplat
 
 func ListWhatsAppTemplates(c messagebird.Client, request *ListWhatsAppTemplatesRequest) (*ListWhatsAppTemplatesResponse, error) {
 	response := &ListWhatsAppTemplatesResponse{}
-	err := c.Request(response, http.MethodGet, apiRoot+"/v3/"+path+"/"+whatsAppTemplatePath, request)
+	apiURL := apiRoot + "/v3/" + path + "/" + whatsAppTemplatePath
+	if request != nil {
+		queryParams := url.Values{}
+		if request.Limit != 0 {
+			queryParams.Add("limit", strconv.Itoa(request.Limit))
+		}
+		if request.Offset != 0 {
+			queryParams.Add("offset", strconv.Itoa(request.Offset))
+		}
+		if request.WabaId != "" {
+			queryParams.Add("wabaId", request.WabaId)
+		}
+		if request.ChannelId != "" {
+			queryParams.Add("channelId", request.ChannelId)
+		}
+		apiURL += "?" + queryParams.Encode()
+	}
+
+	// Encode query parameters and append them to the URL
+	err := c.Request(response, http.MethodGet, apiURL, nil)
 	if err != nil {
 		return nil, err
 	}
