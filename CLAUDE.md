@@ -1,69 +1,83 @@
 @../bah-knowledge/TECHNICAL.md
 @../bah-knowledge/PRODUCT.md
-@../bah-knowledge/GIT-WORKFLOW.md
+@../bah-knowledge/DEVELOPMENT.md
 
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code when working in this repository. Platform-wide patterns (service
+layout, communication, infrastructure, deployment) live in `bah-knowledge/TECHNICAL.md`; this file covers only
+what is specific to messagebird-go-rest-api.
 
-## Overview
+## Status
 
-Fork of the MessageBird Go REST API client. Module path: `github.com/Bijles-aan-Huis-B-V/messagebird-go-rest-api` (differs from upstream `github.com/messagebird/go-rest-api`). Provides a Go SDK for MessageBird's SMS, Voice, Conversations, MMS, WhatsApp, and other APIs. Used by `notification-service` (WhatsApp) and `hubspot-service` (SMS).
+**To be replaced.** Fork of the unmaintained upstream MessageBird Go SDK. Do not add features; new MessageBird
+calls belong in a small client inside the consuming service. It cannot be archived while notification-service and
+hubspot-service import it. `README.md` has the replacement checklist.
 
-## Commands
+## Project Overview
+
+- Module `github.com/Bijles-aan-Huis-B-V/messagebird-go-rest-api`, `go 1.16`. Library only, no deploy, no tags.
+- Forked from upstream v9.1.0 (2022-07). Fork-only commits: `d5316d0` module rename, `f07ae79` + `2a4b5c3`
+  Contacts v2 API and `contact.Upsert`, `c67565d` + `23679fe` `Secret` type and `integration/` (WhatsApp
+  templates), `421306c` (2024-02-08) list filters as query params.
+- Consumers pin `v0.0.0-20240208154711-421306c3a4d4` (= newest code commit):
+  - notification-service (`internal/messageBird/service.go`, `internal/whatsapp/service.go`,
+    `cmd/notification-server/main.go`): `messagebird.New`, `messagebird.Secret`, `conversation.SendMessage`
+    with `conversation.HSM` content, `integration.ListWhatsAppTemplates`, `integration.WhatsAppComponent*`.
+  - hubspot-service (`internal/messagebird/service.go`, `cmd/server/server.go`): `messagebird.New`,
+    `contact.Upsert`, `contact.CreateRequest`, `contact.Identifier`.
+  - Nothing else in the platform imports `sms`, `voice`, `mms`, `verify`, `lookup`, `hlr`, `number`, `group`,
+    `balance`, `partner_accounts`, `voicemessage` or the signature packages.
+
+## Build / Run / Test
 
 ```bash
-# Run all tests
-go test ./...
-
-# Run tests for a specific package
-go test ./sms/
-go test ./voice/
-
-# Run a single test
-go test ./sms/ -run TestCreateMessage
-
-# Build (library only, no main package)
 go build ./...
+go test ./...
+go test ./sms/ -run TestCreateMessage
 ```
 
-## Architecture
+CI: `.github/workflows/tests.yml` (upstream's), `go test ./...` on every push/PR, Go 1.16.x / 1.17.x / 1.18.x,
+`actions/checkout@v2`, `actions/setup-go@v2`. `vendor/` is git-ignored.
 
-**Client pattern**: `messagebird.Client` is an interface with a single `Request(v, method, path, data)` method. `DefaultClient` implements it, handling auth, HTTP transport, and JSON marshalling. Each API domain package accepts a `Client` as its first argument (not methods on the client).
+## Layout and client model
 
-```go
-// Usage pattern - all packages follow this:
-client := messagebird.New(accessKey)
-msg, err := sms.Read(client, "message-id")
-```
+- `client.go`: `Client` interface with one method, `Request(v, method, path, data)`; `DefaultClient` (`New(key)`)
+  adds `Authorization: AccessKey ...`, JSON decoding and error mapping. A path that does not start with
+  `http(s)://` is prefixed with `Endpoint = "https://rest.messagebird.com"`.
+- `prepareRequestBody`: `nil` = no body, `string` = form-encoded, anything else = JSON.
+- API roots used by packages: `conversation/` `https://conversations.messagebird.com/v1`, `voice/`
+  `https://voice.messagebird.com/v1`, `integration/` `https://integrations.messagebird.com`, `contact/`
+  `https://contacts.messagebird.com/v2/contacts` (+ `/v2/ops/contacts` for upsert).
+- `integration/api.go` declares `version = "v2"`, but `ListWhatsAppTemplates` builds `/v3/platforms/whatsapp/templates`
+  inline.
+- `error.go`: `ErrorResponse` (code, description, parameter). `SetErrorReader` stores one global custom reader;
+  both `voice/` and `partner_accounts/` register one in `init()`, so importing both means last one wins.
+- `api.go`: `PaginationRequest` + `DefaultPagination`.
+- `secret.go`: `Secret{Key string; Channels map[string]string}`; notification-service unmarshals the
+  Secrets Manager secret named by its `MESSAGE_BIRD` env var into `map[country]Secret`. hubspot-service uses its
+  own config type for the same env var.
+- `signature/` is deprecated upstream; `signature_jwt/` is the replacement.
 
-**API domain packages**: Each subdirectory (`sms/`, `voice/`, `conversation/`, `contact/`, `balance/`, etc.) is a self-contained package with types, request builders, and API functions. They call `client.Request()` with the appropriate path.
+## Tests (`internal/mbtest`)
 
-**Multiple API roots**: The default endpoint is `rest.messagebird.com`. Packages with different API roots prepend their own base URL to bypass the default:
-- `voice/` uses `https://voice.messagebird.com/v1`
-- `conversation/` uses `https://conversations.messagebird.com/v1`
-- `integration/` uses `https://integrations.messagebird.com`
+1. `TestMain` calls `mbtest.EnableServer(m)` (fake TLS server).
+2. `mbtest.WillReturnTestdata(t, "file.json", status)` sets the canned response; fixtures live in
+   `<package>/testdata/`.
+3. `mbtest.Client(t)` returns a client pointed at the fake server.
+4. Assert with `mbtest.AssertEndpointCalled`, `AssertTestdata`, `AssertTestdataJson`.
+5. `mbtest.MockClient()` gives a testify mock; `mbtest.HTTPTestTransport(handler)` for custom handlers.
 
-**Error handling divergence**: The `voice` package has its own `ErrorResponse`/`Error` types (with `Code` + `Message` fields), registered via `messagebird.SetErrorReader()` in an `init()` function. All other packages use `messagebird.ErrorResponse` (with `Code` + `Description` + `Parameter` fields). Note: `SetErrorReader()` stores a single global `errorReader` — only one custom error reader can be active at a time (last-writer-wins).
+## Replacing it (when asked)
 
-**Request body encoding**: `prepareRequestBody` in `client.go` switches on type: `nil` sends no body, `string` sends as `application/x-www-form-urlencoded`, anything else is JSON-marshalled.
+1. In the consumer, write a minimal client for only the calls listed above (same JSON shapes; copy the request
+   and response structs you need).
+2. Keep the Secrets Manager secret format (`MESSAGE_BIRD`) unless the infra change is planned with it.
+3. Remove the `require` line, run `go mod tidy`, deploy the consumer.
+4. When neither consumer imports this module any more, archive the repo.
 
-**Integration package API versions**: `integration/` declares `version = "v2"` as default, but `ListWhatsAppTemplates` in `integration/whatsapp.go` hardcodes `"v3"` inline. Be aware of this inconsistency when adding new integration endpoints.
+## Gotchas
 
-**Pagination**: `api.go` defines `PaginationRequest` (with `Limit`/`Offset`) and `DefaultPagination`. Sub-packages that need pagination should embed this type.
-
-**Signature validation**: `signature/` is deprecated. Use `signature_jwt/` (`NewValidator` + `ValidateSignature`) for webhook validation.
-
-## Testing
-
-Tests use a shared TLS test server from `internal/mbtest`. The pattern:
-
-1. Each test package has `TestMain` calling `mbtest.EnableServer(m)` to start a fake HTTPS server.
-2. Tests call `mbtest.WillReturnTestdata(t, "filename.json", statusCode)` to set canned responses.
-3. Tests use `mbtest.Client(t)` to get a client wired to the fake server.
-4. Assertions use `mbtest.AssertEndpointCalled(t, method, path)` and `mbtest.AssertTestdata`/`AssertTestdataJson` for request body validation.
-5. Fixture files live in `<package>/testdata/*.json`.
-
-For unit tests that don't need the TLS server, use `mbtest.MockClient()` (returns a `testify/mock`-based no-op client). `mbtest.HTTPTestTransport(handler)` is also available for tests needing a custom HTTP handler (e.g., signature validation tests).
-
-Uses `github.com/stretchr/testify` for assertions.
+- A merge here has no effect until a consumer bumps its pseudo-version.
+- `go 1.16` in `go.mod` and a 1.16-1.18 CI matrix: CI does not test the Go versions the consumers build with.
+- `UPGRADING.md` is upstream's upgrade guide for SDK major versions and does not describe this fork.
